@@ -7,83 +7,67 @@
 
 import SwiftUI
 
-struct Game: Identifiable, Codable {
-    let id: Int
-    let team: String
-    let opponent: String
-    let date: String
-    let isHomeGame: Bool
-    let score: Score
-
-    struct Score: Codable {
-        let unc: Int
-        let opponent: Int
-    }
-}
-
-class GamesViewModel: ObservableObject {
-    @Published var games: [Game] = []
+struct Game: Codable {
+    var id: Int
+    var team: String
+    var opponent: String
+    var date: String
+    var isHomeGame: Bool
+    var score: Score
     
-    func fetchGames() {
-        guard let url = URL(string: "https://api.samuelshi.com/uncbasketball") else { return }
-        
-        URLSession.shared.dataTask(with: url) { data, response, error in
-            if let data = data {
-                DispatchQueue.main.async {
-                    do {
-                        self.games = try JSONDecoder().decode([Game].self, from: data)
-                    } catch {
-                        print("Error decoding JSON: \(error)")
-                    }
-                }
-            }
-        }.resume()
+    struct Score: Codable {
+        var unc: Int
+        var opponent: Int
     }
 }
 
 struct ContentView: View {
-    @StateObject var viewModel = GamesViewModel()
+    @State private var games = [Game]()
     
     var body: some View {
-        NavigationView {
-            List(viewModel.games) { game in
-                GameRow(game: game)
+        List(games, id: \.id) { game in
+            HStack {
+                VStack(alignment: .leading) {
+                    Text("\(game.team) vs. \(game.opponent)")
+                        .font(.headline)
+                    
+                    Text(game.date)
+                        .foregroundColor(.gray)
+                }
+                
+                Spacer()
+                
+                VStack {
+                    Text("\(game.score.unc) - \(game.score.opponent)")
+                        .font(.headline)
+                    
+                    Text(game.isHomeGame ? "Home" : "Away")
+                        .foregroundColor(.gray)
+                }
             }
-            .navigationTitle("UNC Basketball")
+            .padding(.vertical, 5)
         }
-        .onAppear {
-            viewModel.fetchGames()
+        .task {
+            await loadData()
+        }
+    }
+    
+    func loadData() async {
+        guard let url = URL(string: "https://api.samuelshi.com/uncbasketball") else {
+            print("Invalid URL")
+            return
+        }
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            if let decodedResponse = try? JSONDecoder().decode([Game].self, from: data) {
+                games = decodedResponse
+            }
+        } catch {
+            print("Invalid data")
         }
     }
 }
 
-struct GameRow: View {
-    let game: Game
-    
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading) {
-                Text("\(game.team) vs. \(game.opponent)")
-                    .font(.headline)
-                Text(game.date)
-                    .font(.subheadline)
-                    .foregroundColor(.gray)
-            }
-            Spacer()
-            VStack {
-                Text("\(game.score.unc) - \(game.score.opponent)")
-                    .font(.headline)
-                Text(game.isHomeGame ? "Home" : "Away")
-                    .font(.subheadline)
-                    .foregroundColor(.gray)
-            }
-        }
-        .padding(.vertical, 5)
-    }
-}
-
-struct ContentView_Previews: PreviewProvider {
-    static var previews: some View {
-        ContentView()
-    }
+#Preview {
+    ContentView()
 }
